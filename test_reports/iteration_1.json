@@ -1,0 +1,45 @@
+{
+  "summary": "Frontend E2E testing of birthday puzzle multiplayer flow against live Firebase Realtime DB. Login, lobby (with 5min timer + player grid + start-now + revoke-cancel), atomic unique number assignment (P1=#01, P2=#02), real-time multi-player sync across 2 browser contexts, revoke-confirm (clears room), Start now -> /puzzle routing by assignedNumber, Puzzle1 (password 090503) solve, Waiting page progress bar, and Reveal page (single-player end-to-end seen with fragment '01 - Happy birthday.'). One bug found in revoke fan-out: only the player who triggered revoke is redirected; other already-joined players remain stuck on a stale /lobby route and are NOT auto-redirected to login.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Revoke confirm fan-out",
+        "issue": "When player A clicks Revoke -> 'Yes, revoke', the room state and players are wiped in Firebase and player A is redirected to '/'. However other already-joined players (B, C ...) stay on /lobby with stale UI (their lobby renders 'empty seats' for everyone but localStorage 'bp_playerId' still points at the deleted player). They are not auto-redirected to login, and if they try to interact further, they are effectively orphaned. Reproduce: open 2 browser contexts, both join, in context #1 click Revoke -> Yes, revoke. Context #1 lands on '/'; context #2 stays on '/lobby'. Expected: context #2 should also detect the room reset (e.g. their playerId no longer exists under rooms/birthday-room/players) and redirect to '/' (clear localStorage bp_playerId).",
+        "affected_selectors": ["[data-testid=\"revoke-confirm\"]", "[data-testid=\"player-card-2\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Login (data-testid=join-btn) redirects to /lobby",
+    "Lobby shows 5-min countdown timer (data-testid=lobby-timer) and player grid (data-testid=player-card-1..12)",
+    "Multi-player real-time sync: both contexts see player-card-1 (Alice) and player-card-2 (Bob) live",
+    "Atomic unique assignedNumbers via runTransaction: P1=#01 Alice, P2=#02 Bob (no collision)",
+    "Revoke confirmation dialog (data-testid=revoke-confirm-dialog) appears on click",
+    "Revoke 'Never mind' (data-testid=revoke-cancel) closes dialog without state change; player remains in /lobby",
+    "Start now button (data-testid=start-now-btn) routes BOTH connected players to /puzzle simultaneously",
+    "Puzzle routing by assignedNumber: P1->Puzzle1Password (puzzle1-input), P2->Puzzle2Caesar (puzzle2-input)",
+    "Puzzle1 solve: filling '090503' and clicking unlock (puzzle1-submit) advances player out of /puzzle",
+    "Waiting page (data-testid=waiting-progress) shown while other players still solving",
+    "Single-player end-to-end: solve puzzle1 -> /reveal showing ordered fragment '01 Happy birthday.' with 'read by Solo - your turn'",
+    "Revoke confirm clears Firebase state and redirects the triggering player to '/'"
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "In Lobby.jsx (or a top-level Firebase listener), add logic so that when a player's own playerId is no longer present under rooms/birthday-room/players (or counter resets to 0/state cleared), the client clears localStorage bp_playerId and navigates to '/'. Today this only happens for the player who clicked Revoke; other players stay on a stale /lobby."
+  ],
+  "critical_code_review_comments": [
+    "Revoke flow is not idempotent across other clients: only the initiator's local state is cleared. Recommend listening to player presence and triggering navigate('/') when the local playerId disappears.",
+    "Firebase DB rules are wide-open ('.read': true, '.write': true) per PRD. Acceptable for test, MUST be tightened before any public deploy.",
+    "localStorage 'bp_playerId' persistence is intentional but creates orphan-player risk after revoke; adding the listener above also fixes that."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "92% (12/13 scenarios pass; 1 multi-player revoke fan-out bug)"},
+  "test_credentials": "n/a (no auth) - players just enter a name",
+  "seed_data_creation": "Used Firebase REST DELETE on rooms/birthday-room.json before each scenario to reset state.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Live Firebase project birthday-nisha is reachable and behaving. Reset state between runs via: curl -X DELETE 'https://birthday-nisha-default-rtdb.asia-southeast1.firebasedatabase.app/rooms/birthday-room.json'. Login input has no type attribute, so use selector 'input' (not 'input[type=text]'). Single-player Start-now -> Puzzle1 -> Reveal flow is fully working. Multi-player atomic numbering and start-now broadcast also work. The remaining gap is revoke fan-out to other clients."
+}
