@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ref, onValue, update } from "firebase/database";
 import { database, ROOM_ID } from "@/firebase";
@@ -15,11 +15,21 @@ export default function Puzzle() {
   const [me, setMe] = useState(null);
   const playerId = localStorage.getItem(PLAYER_KEY);
   const isAdmin = localStorage.getItem(ADMIN_KEY) === "true";
+  const sawSelf = useRef(false);
 
   useEffect(() => {
     if (isAdmin) { navigate("/admin"); return; }
     if (!playerId) { navigate("/"); return; }
-    const unsub = onValue(ref(database, `rooms/${ROOM_ID}/players/${playerId}`), (s) => setMe(s.val()));
+    const unsub = onValue(ref(database, `rooms/${ROOM_ID}/players/${playerId}`), (s) => {
+      const v = s.val();
+      setMe(v);
+      if (v) sawSelf.current = true;
+      else if (sawSelf.current) {
+        // I was here, now I'm gone — revoked
+        localStorage.removeItem(PLAYER_KEY);
+        navigate("/");
+      }
+    });
     const unsubState = onValue(ref(database, `rooms/${ROOM_ID}/state`), (s) => {
       const v = s.val() || "lobby";
       if (v === "lobby") navigate("/lobby");
@@ -27,14 +37,6 @@ export default function Puzzle() {
     });
     return () => { unsub(); unsubState(); };
   }, [playerId, isAdmin, navigate]);
-
-  // Bug fix: if my player record is gone (admin revoked), bounce to login
-  useEffect(() => {
-    if (!playerId) return;
-    if (me === null) {
-      // could be initial load OR record removed; only redirect if firebase explicitly returned null after first load
-    }
-  }, [me, playerId]);
 
   useEffect(() => {
     if (me?.isCompleted) navigate("/waiting");

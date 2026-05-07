@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ref, onValue, set } from "firebase/database";
 import { database, ROOM_ID } from "@/firebase";
@@ -12,6 +12,7 @@ export default function Waiting() {
   const [players, setPlayers] = useState({});
   const [state, setState] = useState("playing");
   const playerId = localStorage.getItem(PLAYER_KEY);
+  const sawSelf = useRef(false);
 
   useEffect(() => {
     if (!playerId) { navigate("/"); return; }
@@ -24,6 +25,16 @@ export default function Waiting() {
     });
     return () => { u1(); u2(); };
   }, [playerId, navigate]);
+
+  // Bounce to login if revoked
+  useEffect(() => {
+    if (!playerId) return;
+    if (players[playerId]) { sawSelf.current = true; return; }
+    if (sawSelf.current) {
+      localStorage.removeItem(PLAYER_KEY);
+      navigate("/");
+    }
+  }, [players, playerId, navigate]);
 
   const playersList = Object.values(players).sort((a, b) => a.assignedNumber - b.assignedNumber);
   const completed = playersList.filter((p) => p.isCompleted);

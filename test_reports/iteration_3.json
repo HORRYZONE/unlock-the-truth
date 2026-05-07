@@ -1,0 +1,33 @@
+{
+  "summary": "Re-tested ONLY the revoke fan-out fix and dynamic fragments (per main agent instructions). All 4 explicit scenarios PASS. The iteration_2 critical bug ('revoke does not fan out to other players because Lobby.jsx short-circuits when players map is empty') is now FIXED via the sawSelf useRef pattern in Lobby.jsx, Puzzle.jsx and Waiting.jsx.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "REVOKE FAN-OUT in /lobby: 2 ctxs (Alice on /lobby, Admin69 on /admin). Admin clicks admin-revoke-btn -> admin-revoke-confirm. Alice auto-redirects from /lobby to / within ~1s. localStorage.bp_playerId removed. PASS.",
+    "REVOKE FAN-OUT in /puzzle: Admin starts game, Alice navigates to /puzzle. Admin Revoke -> Confirm. Alice auto-redirects from /puzzle to /. localStorage.bp_playerId removed. PASS.",
+    "REVOKE FAN-OUT in /waiting (re-run with 2 players Alice+Bob; only Alice solves so state stays 'playing' and she stays on /waiting; original 1-player setup auto-transitions to /reveal because completed===total): Alice solves puzzle1 with '090503' -> /waiting. Admin Revoke -> Confirm. Alice auto-redirects from /waiting to /. Bob also auto-redirects from /puzzle to /. localStorage.bp_playerId removed for both. PASS.",
+    "DYNAMIC FRAGMENTS with 3 players: After admin Start with Alice, Bob, Carol, Firebase rooms/birthday-room/players REST GET shows EACH player has a non-empty assignedFragment. Joined in order #01+#02+#03 they reconstruct the full 12-sentence birthday message exactly. Each fragment is exactly the expected 4-sentence chunk: Alice=sentences 1-4, Bob=5-8, Carol=9-12. PASS."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Minor (not blocking): When a single player completes their puzzle in /waiting, Waiting.jsx auto-flips state to 'finished' (line 45-49) and the player jumps to /reveal. With only 1 player this happens before admin can click Revoke. Reveal.jsx may not have the sawSelf fan-out logic — if revoking after the game has reached 'finished' is a real-world flow, consider adding the same sawSelf pattern (or revokedAt listener) to Reveal.jsx as a defense-in-depth.",
+    "Minor: Admin auto-start (Admin.jsx lines 75-81) only fires if an admin client is open at timer=0; if no admin connected the game never auto-starts. Iteration_2 already flagged this — still applicable but out of scope for this iteration."
+  ],
+  "critical_code_review_comments": [
+    "FIX VERIFIED: Lobby.jsx lines 42-53 now use sawSelf useRef(false). On every onValue snapshot, if players[me] exists set sawSelf.current=true; if missing AND sawSelf.current is true, removeItem + navigate('/'). This correctly handles the revoke case (players map becomes null/empty) without the previous defensive early-return.",
+    "Same sawSelf pattern correctly applied to Puzzle.jsx (lines 18, 23-32) listening on /players/{playerId} directly, and Waiting.jsx (lines 15, 30-37) listening on /players. Both verified working at runtime.",
+    "Admin.jsx startGame uses getFragmentsForCount(list.length) so the dynamic split scales correctly: 3 players -> 3 chunks of 4 sentences each, 12 -> 12, 1 -> full message. Verified."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "100% (4/4 scenarios pass)"},
+  "test_credentials": "Admin username 'Admin69' (case-sensitive)",
+  "seed_data_creation": "Firebase REST DELETE on /rooms/birthday-room.json before each scenario. New browser contexts per player.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Revoke fan-out is fully fixed using the sawSelf useRef pattern in Lobby.jsx, Puzzle.jsx, Waiting.jsx. Dynamic fragments correctly produce N balanced chunks for N players. Note: with a single player on /waiting, the page auto-transitions to /reveal because completed===total triggers state='finished'. Use 2+ players (only one solving) if you need to keep someone parked on /waiting for testing.",
+  "rca_of_the_issue": "Previous bug: Lobby.jsx contained 'if (Object.keys(players).length === 0) return;' which short-circuited the revoke detection because revoke wipes the players map. Fix: Replaced with a sawSelf useRef(false). When any player snapshot includes the local playerId we set sawSelf.current=true. Subsequent snapshots that drop the playerId trigger localStorage.removeItem(PLAYER_KEY) + navigate('/'). The same pattern was added to Puzzle.jsx (subscribed at /players/{me}) and Waiting.jsx (subscribed at /players). Verified via 4 e2e scenarios on the public preview URL."
+}

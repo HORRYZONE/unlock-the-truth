@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { ref, onValue } from "firebase/database";
 import { database, ROOM_ID, LOBBY_TIMER_SECONDS } from "@/firebase";
@@ -17,6 +17,7 @@ export default function Lobby() {
   const [now, setNow] = useState(Date.now());
   const playerId = localStorage.getItem(PLAYER_KEY);
   const isAdmin = localStorage.getItem(ADMIN_KEY) === "true";
+  const sawSelf = useRef(false);
 
   useEffect(() => {
     if (isAdmin) { navigate("/admin"); return; }
@@ -38,11 +39,14 @@ export default function Lobby() {
     return () => { u1(); u2(); u3(); u4(); u5(); clearInterval(t); };
   }, [playerId, isAdmin, navigate]);
 
-  // If revoked / removed, bounce to login
+  // If revoked / removed, bounce to login (only after we've seen ourselves at least once)
   useEffect(() => {
     if (!playerId) return;
-    if (Object.keys(players).length === 0) return;
-    if (!players[playerId]) {
+    if (players[playerId]) {
+      sawSelf.current = true;
+      return;
+    }
+    if (sawSelf.current) {
       localStorage.removeItem(PLAYER_KEY);
       navigate("/");
     }
