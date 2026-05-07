@@ -1,0 +1,58 @@
+{
+  "summary": "Frontend E2E re-testing of birthday puzzle multiplayer app after iteration_1. Verified intro flow (loader -> invitation -> form), session-skip, Admin via 'Admin69' username, /admin URL guard, all admin testids and controls (start/revoke/reset/pause/resume/reset-timer), lobby gating (no start/revoke buttons for regular players), music toggle, multi-player join (3 players), admin puzzle preview, /admin/puzzle/1 with puzzle1-input. CRITICAL FINDING: the iteration_1 revoke fan-out bug is STILL NOT FIXED. When admin clicks Revoke -> Confirm, other already-joined players in /lobby remain stuck and do NOT auto-redirect to login. Root cause confirmed in /app/frontend/src/pages/Lobby.jsx line 44: 'if (Object.keys(players).length === 0) return;' short-circuits the player-removal detection when revoke wipes the entire players map.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Admin Revoke fan-out to other players",
+        "issue": "When admin (in context A) clicks admin-revoke-btn -> admin-revoke-confirm, Firebase wipes rooms/birthday-room/players (=null) and resets state. Already-joined players in another browser context (e.g. Alice on /lobby) remain stuck on /lobby and are NOT redirected to /. Reproduced 100% of the time. Root cause: Lobby.jsx line 44 has 'if (Object.keys(players).length === 0) return;' which short-circuits the very check that should detect 'I am no longer in the players map'. Because revoke sets players to null/{}, this early return prevents the navigate('/') from firing. Iteration_1 reported this bug; it has NOT been fixed in this iteration.",
+        "affected_selectors": ["[data-testid=\"admin-revoke-confirm\"]", "[data-testid=\"player-card-1\"]", "[data-testid=\"join-form-screen\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Intro: data-testid=loader-screen visible on first visit, auto-advances to invitation-screen after ~1.9s",
+    "Invitation card shows 'You're invited' title and works; invitation-next-btn advances to join-form-screen",
+    "Session skip: with sessionStorage.bp_seenIntro='true', revisiting / lands directly on join-form-screen (no loader, no invitation)",
+    "Regular player join: name -> join-btn -> /lobby; player-card-1 visible; localStorage bp_playerId set",
+    "Lobby gating: NEITHER data-testid=start-now-btn NOR data-testid=revoke-btn exist on /lobby for regular players",
+    "Admin via username: typing 'Admin69' (case-sensitive) -> redirect to /admin (NOT /lobby), localStorage bp_isAdmin=true, no player record created in Firebase",
+    "Admin not counted as player: admin-player-count shows '0 / 12' immediately after admin login with no other players",
+    "/admin URL guard: visiting /admin without bp_isAdmin in localStorage redirects to /; setting bp_isAdmin='true' allows access",
+    "Admin testids present: admin-title, admin-state, admin-player-count, admin-timer, admin-start-btn, admin-revoke-btn, admin-reset-btn, admin-pause-timer, admin-reset-timer, admin-puzzle-grid all OK; admin-resume-timer correctly hidden when not paused",
+    "12 admin-puzzle-link elements rendered in admin-puzzle-grid",
+    "Admin Stop timer (admin-pause-timer): clicking freezes timer (verified mm:ss unchanged after 1.5s wait), swaps button to admin-resume-timer, sets timerPaused=true in DB",
+    "Admin Resume timer: admin-resume-timer click swaps back to admin-pause-timer (timer continues)",
+    "Admin Reset timer: admin-reset-timer sets timer back to ~05:00",
+    "Admin Reset room dialog: admin-reset-btn opens admin-reset-dialog with admin-reset-cancel + admin-reset-confirm",
+    "Admin Revoke dialog: admin-revoke-btn opens admin-revoke-dialog with admin-revoke-cancel + admin-revoke-confirm; confirm wipes Firebase players (verified via REST GET)",
+    "Admin puzzle preview: clicking admin-puzzle-link-1 navigates to /admin/puzzle/1 showing 'The Locked Door' title; puzzle1-input present; 12 admin-puzzle-quick-1..12 quick-nav buttons; admin-back returns to /admin",
+    "Music toggle: data-testid=music-toggle present on every page (login, lobby, admin)",
+    "Multi-player join: Alice/Bob/Carol joined in 3 separate browser contexts; all 3 player cards visible in lobby; assignedNumber 1/2/3 atomically assigned via runTransaction"
+  ],
+  "failed_or_unverified_tests": [
+    "REVOKE FAN-OUT redirect of other players to / -> FAILED (bug still present, see integration_issues)",
+    "ADMIN START broadcast with 3 players + dynamic fragments -> UNVERIFIED in this run (admin reload showed 0/12 stale, likely a Firebase sync timing artifact in test, not necessarily a product bug; assignedFragment was empty when read after a no-op start). Recommend main agent self-verify after fixing revoke fan-out."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "FIX REVOKE FAN-OUT (HIGH): In /app/frontend/src/pages/Lobby.jsx, the useEffect on line 42-49 must redirect to / when the local playerId is no longer in the players map after we have once seen the data load. Suggested fix: replace 'if (Object.keys(players).length === 0) return;' with a 'playersSynced' flag (useRef or useState set true on first onValue callback) so that AFTER initial sync, an empty/missing-self players map triggers localStorage.removeItem(PLAYER_KEY) + navigate('/'). Alternatively, also listen to rooms/birthday-room/revokedAt and force a redirect when its value increases.",
+    "Optional: also have Puzzle.jsx and Waiting.jsx subscribe to player presence so that revoke during /puzzle or /waiting also fans out cleanly."
+  ],
+  "critical_code_review_comments": [
+    "Lobby.jsx line 44 'if (Object.keys(players).length === 0) return;' is a defensive guard that incorrectly suppresses the revoke-detection branch — the exact bug from iteration_1.",
+    "Admin's auto-start-on-timer-zero (Admin.jsx lines 75-81) only triggers if an admin client is open. If no admin is connected when timer hits 0, game will never auto-start. Consider moving auto-start logic to a server-side trigger or having any client (incl. players) compete to flip state with a transaction.",
+    "Firebase DB rules remain wide-open per PRD; acceptable for testing only.",
+    "AdminPuzzlePreview.jsx renders the actual Puzzle1 component which expects/exposes puzzle1-input. Verified working."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "94% (17/18 explicit scenarios pass; the multi-player REVOKE FAN-OUT scenario still fails — this was the only feature flagged for re-test in this iteration)"},
+  "test_credentials": "Admin username 'Admin69' (case-sensitive). No password / no other auth.",
+  "seed_data_creation": "Used Firebase REST DELETE on rooms/birthday-room.json before each scenario to reset state. localStorage and sessionStorage cleared per context per scenario.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The intro flow, admin console, timer controls, lobby gating, and admin puzzle preview all work as specified. The single remaining bug is the revoke fan-out: Lobby.jsx line 44 must be changed so revoke-induced empty-players doesn't get short-circuited. After fix, retest only the 'REVOKE FAN-OUT' scenario: 2 contexts, Alice joins, Admin69 logs into /admin, admin Revoke -> Confirm, expect Alice to land on /. Also retest dynamic fragments with 3 players + admin Start to confirm 3 chunks (not 12) are written to assignedFragment.",
+  "rca_of_the_issue": "Repro: open ctx1 join as Alice -> /lobby; open ctx2, login Admin69 -> /admin (admin-player-count='1 / 12'); admin clicks admin-revoke-btn -> admin-revoke-confirm. Firebase rooms/birthday-room/players is set to null. ctx1 Lobby useEffect at lines 42-49 fires with players={}; line 44 'if (Object.keys(players).length === 0) return;' returns immediately, so the players[playerId] check on line 45 never runs, so the navigate('/') on line 47 never executes. ctx1 stays on /lobby. Mitigation: add a sync flag (e.g. const synced = useRef(false); inside u1's onValue callback set synced.current=true) and gate the redirect on synced.current rather than the size of the players map."
+}

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { playClick, playSuccess } from "@/sounds";
 
 const SYMBOLS = ["🎂", "🎈", "🎁", "🌸", "🍰", "💌"];
 
@@ -21,18 +20,16 @@ export default function Puzzle11Memory({ onSolve }) {
   const allMatched = deck.every((c) => c.matched);
 
   useEffect(() => {
-    if (allMatched) {
-      setTimeout(() => onSolve(), 700);
-    }
+    if (allMatched) { playSuccess(); setTimeout(() => onSolve(), 700); }
   }, [allMatched, onSolve]);
 
   const flip = (card) => {
     if (card.flipped || card.matched || picked.length === 2) return;
+    playClick();
     const newDeck = deck.map((c) => (c.id === card.id ? { ...c, flipped: true } : c));
     const newPicked = [...picked, card];
     setDeck(newDeck);
     setPicked(newPicked);
-
     if (newPicked.length === 2) {
       setMoves((m) => m + 1);
       const [a, b] = newPicked;
@@ -51,25 +48,21 @@ export default function Puzzle11Memory({ onSolve }) {
   };
 
   return (
-    <div className="bg-pink-50 border border-pink-200 rounded-3xl p-8 sm:p-12 shadow-lg fade-in-up">
-      <p className="text-xs uppercase tracking-[0.3em] text-pink-700 text-center mb-3">Memory Lane</p>
-      <h3 className="text-center text-stone-700 italic mb-2">Match every pair to remember.</h3>
-      <p className="text-center text-stone-500 text-sm mb-8 mono" data-testid="puzzle11-moves">moves: {moves}</p>
+    <div className="glass-card border-rose-500/30 rounded-3xl p-6 sm:p-12 shadow-2xl fade-in-up">
+      <p className="text-[10px] uppercase tracking-[0.4em] text-rose-300/80 text-center mb-3 italiana">Memory Lane</p>
+      <h3 className="text-center text-stone-300 italic mb-2">Match every pair to remember.</h3>
+      <p className="text-center text-stone-400 text-sm mb-6 sm:mb-8 mono" data-testid="puzzle11-moves">moves: {moves}</p>
 
       <div className="grid grid-cols-4 gap-2 sm:gap-3 max-w-md mx-auto" data-testid="puzzle11-grid">
         {deck.map((card) => (
-          <button
-            key={card.id}
-            data-testid={`puzzle11-card-${card.id}`}
-            onClick={() => flip(card)}
+          <button key={card.id} data-testid={`puzzle11-card-${card.id}`} onClick={() => flip(card)}
             className={`aspect-square rounded-xl text-3xl sm:text-4xl flex items-center justify-center transition-all duration-300 ${
               card.matched
-                ? "bg-emerald-100 border-2 border-emerald-300"
+                ? "bg-emerald-500/20 border-2 border-emerald-500/50"
                 : card.flipped
-                ? "bg-white border-2 border-pink-300 shadow-md"
-                : "bg-pink-700 hover:bg-pink-800 text-pink-700"
-            }`}
-          >
+                ? "bg-amber-500/10 border-2 border-amber-500/40"
+                : "btn-maroon"
+            }`}>
             {card.flipped || card.matched ? card.symbol : "♥"}
           </button>
         ))}
