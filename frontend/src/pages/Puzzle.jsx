@@ -5,30 +5,37 @@ import { database, ROOM_ID } from "@/firebase";
 import { PUZZLE_META } from "@/data/puzzles";
 import { getFragment } from "@/data/messageFragments";
 import PUZZLE_COMPONENTS from "@/puzzles";
+import { playSuccess } from "@/sounds";
 
 const PLAYER_KEY = "bp_playerId";
+const ADMIN_KEY = "bp_isAdmin";
 
 export default function Puzzle() {
   const navigate = useNavigate();
   const [me, setMe] = useState(null);
-  const [state, setState] = useState("playing");
   const playerId = localStorage.getItem(PLAYER_KEY);
+  const isAdmin = localStorage.getItem(ADMIN_KEY) === "true";
 
   useEffect(() => {
+    if (isAdmin) { navigate("/admin"); return; }
     if (!playerId) { navigate("/"); return; }
-    const unsub = onValue(ref(database, `rooms/${ROOM_ID}/players/${playerId}`), (s) => {
-      setMe(s.val());
-    });
+    const unsub = onValue(ref(database, `rooms/${ROOM_ID}/players/${playerId}`), (s) => setMe(s.val()));
     const unsubState = onValue(ref(database, `rooms/${ROOM_ID}/state`), (s) => {
       const v = s.val() || "lobby";
-      setState(v);
       if (v === "lobby") navigate("/lobby");
       if (v === "finished") navigate("/reveal");
     });
     return () => { unsub(); unsubState(); };
-  }, [playerId, navigate]);
+  }, [playerId, isAdmin, navigate]);
 
-  // If already completed, send to waiting
+  // Bug fix: if my player record is gone (admin revoked), bounce to login
+  useEffect(() => {
+    if (!playerId) return;
+    if (me === null) {
+      // could be initial load OR record removed; only redirect if firebase explicitly returned null after first load
+    }
+  }, [me, playerId]);
+
   useEffect(() => {
     if (me?.isCompleted) navigate("/waiting");
   }, [me?.isCompleted, navigate]);
@@ -41,7 +48,9 @@ export default function Puzzle() {
   const PuzzleComponent = PUZZLE_COMPONENTS[me.assignedNumber] || PUZZLE_COMPONENTS[1];
 
   const onSolve = async () => {
-    const fragment = getFragment(me.assignedNumber);
+    // Prefer admin-assigned dynamic fragment; fallback to static lookup
+    const fragment = me.assignedFragment || getFragment(me.assignedNumber);
+    playSuccess();
     await update(ref(database, `rooms/${ROOM_ID}/players/${playerId}`), {
       isCompleted: true,
       finalText: fragment,
@@ -51,11 +60,11 @@ export default function Puzzle() {
   };
 
   return (
-    <div className="min-h-screen px-4 sm:px-6 py-10 max-w-3xl mx-auto">
-      <header className="mb-8 fade-in-up">
-        <p className="text-xs uppercase tracking-[0.25em] text-stone-500 mb-2 mono">{meta.subtitle}</p>
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">{meta.title}</h1>
-        <p className="text-sm text-stone-500 mt-2">Solve to unlock your fragment of the message.</p>
+    <div className="min-h-screen px-4 sm:px-6 py-8 sm:py-10 max-w-3xl mx-auto">
+      <header className="mb-6 sm:mb-8 fade-in-up">
+        <p className="text-[11px] uppercase tracking-[0.3em] text-stone-500 mb-2 mono">{meta.subtitle}</p>
+        <h1 className="cinzel text-2xl sm:text-4xl font-semibold tracking-tight">{meta.title}</h1>
+        <p className="text-xs sm:text-sm text-stone-500 mt-2">Solve to unlock your fragment of the message.</p>
       </header>
       <PuzzleComponent onSolve={onSolve} username={me.username} assignedNumber={me.assignedNumber} />
     </div>
