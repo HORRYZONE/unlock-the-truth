@@ -139,47 +139,71 @@ Players in the lobby see only the timer + their seat — **no Start/Revoke butto
 
 ## ✦ Deploy to Firebase Hosting
 
-You have **two paths** — either works:
+You have **two paths**. Both work — **Option B is what I used to deploy your live site at https://unlock-the-truth.web.app**.
 
-### Option A — Deploy from your local machine (recommended)
+### Option A — Deploy from your local machine
 
 1. Install Node 18+ and the CLI:
    ```bash
    npm install -g firebase-tools
    firebase login
    ```
-2. **Clone the project** to your local machine (or download `/app` as a zip from Emergent).
-   ```bash
-   git clone <your-repo>   # or unzip the export
-   cd <project>
-   ```
-3. **Set your project ID** in `.firebaserc`:
-   ```json
-   { "projects": { "default": "birthday-nisha" } }
-   ```
-4. Make sure `frontend/.env` has your Firebase config (same as dev).
-5. Build the React app:
+2. Clone or download `/app` to your computer.
+3. Make sure `frontend/.env` has your Firebase config (same values as in this pod).
+4. Build and deploy:
    ```bash
    cd frontend && yarn install && yarn build && cd ..
+   firebase deploy --only hosting:unlock-the-truth --project birthday-nisha
    ```
-6. Deploy:
-   ```bash
-   firebase deploy
-   ```
-   This pushes both **Hosting** (from `frontend/build/`) and **Database rules** (`database.rules.json`) using `firebase.json`.
-7. Your site is live at `https://birthday-nisha.web.app` (and `https://birthday-nisha.firebaseapp.com`).
 
-### Option B — Deploy from this Emergent pod
+### Option B — Deploy from this Emergent pod (simple, repeatable)
 
+This is **exactly the recipe I used**. Re-run it any time you change code.
+
+**One-time setup** (already done — you can skip on subsequent deploys):
+- `firebase.json` has `"hosting": { "target": "unlock-the-truth", "public": "frontend/build", ... }`
+- `.firebaserc` maps the target: `"targets": { "birthday-nisha": { "hosting": { "unlock-the-truth": ["unlock-the-truth"] } } }`
+- `firebase-tools` is already installed in this pod (`npm install -g firebase-tools` if not).
+
+**Get a fresh CI token** (≈30 seconds, on YOUR computer — not in the pod):
 ```bash
-cd /app
-npm install -g firebase-tools
-firebase login --no-localhost   # follow the URL it prints, paste auth code
-cd frontend && yarn build && cd ..
-firebase deploy
+npx firebase-tools login:ci
+```
+This opens a browser, you log in once, and prints a long token starting with `1//`. Copy it.
+
+**Deploy** (in this pod, replace `<YOUR_TOKEN>`):
+```bash
+cd /app/frontend && yarn build && cd /app && \
+  FIREBASE_TOKEN="<YOUR_TOKEN>" firebase deploy \
+    --only hosting:unlock-the-truth \
+    --project birthday-nisha \
+    --non-interactive
 ```
 
-That's it. No need to change anything else.
+You'll see:
+```
+✔  hosting[unlock-the-truth]: release complete
+✔  Deploy complete!
+Hosting URL: https://unlock-the-truth.web.app
+```
+
+**🔒 After deploying, revoke the token** (treat it like a password):
+```bash
+firebase logout --token "<YOUR_TOKEN>"
+```
+Generate a new one each time you deploy.
+
+### Deploying database rules too
+
+If you change `database.rules.json`, run:
+```bash
+FIREBASE_TOKEN="<YOUR_TOKEN>" firebase deploy --only database --project birthday-nisha --non-interactive
+```
+
+Or deploy everything at once:
+```bash
+FIREBASE_TOKEN="<YOUR_TOKEN>" firebase deploy --project birthday-nisha --non-interactive
+```
 
 ---
 
