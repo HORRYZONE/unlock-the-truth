@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "target": "unlock-the-truth",
     "public": "frontend/build",
     "ignore": [
       "firebase.json",

@@ -1,5 +1,14 @@
 {
   "projects": {
-    "default": "REPLACE_WITH_YOUR_FIREBASE_PROJECT_ID"
+    "default": "birthday-nisha"
+  },
+  "targets": {
+    "birthday-nisha": {
+      "hosting": {
+        "unlock-the-truth": [
+          "unlock-the-truth"
+        ]
+      }
+    }
   }
 }
